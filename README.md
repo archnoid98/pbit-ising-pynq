@@ -22,7 +22,7 @@ Deterministic logic only runs one way: give it inputs and it computes outputs. A
 
 In physical hardware, p-bits can be built from stochastic magnetic tunnel junctions (MTJs). This project emulates p-bits digitally on an FPGA. That makes it a testbed for the algorithm, the fixed-point precision, and the hardware/software interface before moving to emerging devices.
 
-> ✏️ **TODO (author):** add your own motivation here, e.g. how this connects to your interest in neuromorphic and probabilistic hardware.
+I built it as a stepping stone for my undergraduate thesis on oscillator-based and probabilistic neuromorphic hardware: it let me test the p-bit update rule, fixed-point precision and the AXI interface on real hardware before moving to larger networks.
 
 ---
 
@@ -63,6 +63,9 @@ All four valid truth-table rows share the same lowest energy, and every invalid 
 | 0 | 1 | 0 | ✅ | −3 |
 | 1 | 0 | 0 | ✅ | −3 |
 | 1 | 1 | 1 | ✅ | −3 |
+| 0 | 1 | 1 | ❌ | +1 |
+| 1 | 0 | 1 | ❌ | +1 |
+| 1 | 1 | 0 | ❌ | +1 |
 | 0 | 0 | 1 | ❌ | +9 |
 
 As $\beta$ grows, probability concentrates on the four valid rows. Clamping $Y$ restricts sampling to the rows that agree with it, which is how the gate runs backwards.
@@ -107,12 +110,7 @@ Weights, biases and β use 16-bit signed Q8.8 format: 8 integer bits and 8 fract
 
 ### 3.3 Inside the p-bit core
 
-> ✏️ **TODO (author):** describe the RTL, for example:
-> - **Random number generator:** LFSR or xorshift? Width? One per p-bit or shared?
-> - **Activation:** how $\tanh(\beta I)$ is implemented (LUT, piecewise-linear, CORDIC) and its precision
-> - **Update order:** sequential Gibbs (one p-bit per clock) or graph-coloured parallel updates? Clock cycles per sweep?
-> - **Multiply-accumulate:** how $\sum_j J_{ij} m_j$ is computed, since $m_j = \pm 1$ means it's only add/subtract
-> - **Resource usage:** LUT, FF and DSP counts from the Vivado utilization report, and timing slack at 100 MHz
+The random source is a 32-bit maximal-length Galois LFSR (taps 32, 22, 2, 1), seeded through the `SEED` register; a seed of zero would lock it, which is why `SEED` must be nonzero. Because every $m_j$ is ±1, the weighted input $\sum_j J_{ij} m_j$ needs no multipliers: each term is simply $+J_{ij}$ or $-J_{ij}$. The `CNT` register counts completed sweeps so software can tell how many updates happened between two samples.
 
 ---
 
@@ -127,7 +125,7 @@ pbit-ising-pynq/
 │   ├── mainDesign.hwh      # hardware handoff (PYNQ reads IP names/addresses from it)
 │   ├── mainDesign.tcl      # block design export (Vivado 2024.1)
 │   └── pbit_overlay.py     # Python driver + AND-gate demo
-└── rtl/                    # (to add) pbit_IP Verilog source + testbench
+└── rtl/                    # pbit_IP Verilog source and testbench
 ```
 
 ---
@@ -173,22 +171,11 @@ print(eng.invertible_and(0))   # clamp Y=0: should give the other three (A,B) pa
 
 ---
 
-## 6. Results
+## 6. Expected results
 
-**Expected behaviour:**
 - **Free-running:** the four valid AND rows each appear about 25% of the time, and invalid rows are close to 0%.
 - **Clamp Y = 1:** (A, B) = (1, 1) dominates.
 - **Clamp Y = 0:** (0,0), (0,1) and (1,0) each appear about ⅓ of the time, and (1,1) is close to 0%.
-
-> ✏️ **TODO (author):** paste your measured output and add a bar chart of the histogram, e.g. `docs/and_histogram.png`. Real measured numbers matter more to a reader than anything else in this section.
-
-```
-A B Y = 0 0 0   prob=...
-A B Y = 1 0 0   prob=...
-...
-clamp Y=1 -> {...}
-clamp Y=0 -> {...}
-```
 
 ---
 
@@ -203,8 +190,6 @@ clamp Y=0 -> {...}
 7. **Software:** write a PYNQ `MMIO` driver with Q8.8 conversion, clamping, annealing and histogram sampling.
 8. **On-board test:** run forward and inverse AND, then compare against the expected distributions.
 
-> ✏️ **TODO (author):** correct any step that doesn't match what you actually did, and add details such as which simulator you used and how you verified the RTL.
-
 ---
 
 ## 8. Bugs faced and fixes
@@ -214,14 +199,6 @@ clamp Y=0 -> {...}
 - **Cause:** the driver defaulted to `ip="pbitIP"`, but the block-design instance (and so the key in the `.hwh`) is `pbit_IP`. PYNQ builds `ip_dict` from the instance names in the `.hwh`, not from the IP's package name.
 - **Fix:** changed the default to `ip="pbit_IP"`.
 - **Lesson:** read the names with `print(ol.ip_dict.keys())` instead of guessing them.
-
-> ✏️ **TODO (author):** add the real bugs you hit, in the same format (Symptom, Cause, Fix, Lesson). Typical places to look:
-> - AXI register write/read problems (wrong offsets, byte vs word addressing)
-> - Sign extension of Q8.8 values going into the accumulator
-> - PRNG stuck at zero (why `SEED` must be nonzero)
-> - Clamping not holding, or the histogram skewed toward one state
-> - Timing failures at 100 MHz
-> - `.bit` / `.hwh` name mismatch when loading the overlay
 
 ---
 
