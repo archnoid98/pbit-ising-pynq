@@ -47,7 +47,7 @@ P(\mathbf{m}) \propto e^{-\beta E(\mathbf{m})}
 ```
 
 ```math
-E(\mathbf{m}) = -\sum_{i<j} J_{ij} m_i m_j - \sum_i h_i m_i
+E(\mathbf{m}) = -\sum_{i \lt j} J_{ij} m_i m_j - \sum_i h_i m_i
 ```
 
 In hardware, bit value `1` represents $m = +1$ and bit value `0` represents $m = -1$.
