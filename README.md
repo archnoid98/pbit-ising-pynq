@@ -30,34 +30,40 @@ I built it as a stepping stone for my undergraduate thesis on oscillator-based a
 
 ### 2.1 The p-bit equation
 
-Each p-bit $m_i \in \{-1, +1\}$ updates as
+Each p-bit $m_i$ takes the value $-1$ or $+1$ and updates as
 
-$$
-I_i = \sum_j J_{ij}\, m_j + h_i, \qquad
-m_i = \operatorname{sgn}\!\big(\tanh(\beta I_i) - r\big), \quad r \sim \mathcal{U}(-1, 1)
-$$
+```math
+I_i = \sum_j J_{ij} m_j + h_i
+```
+
+```math
+m_i = \text{sgn}\left( \tanh(\beta I_i) - r \right), \qquad r \sim \mathcal{U}(-1, 1)
+```
 
 where $J_{ij}$ are the symmetric couplings, $h_i$ the biases, and $\beta$ the inverse temperature. With sequential updates, the network samples the Boltzmann distribution
 
-$$
-P(\mathbf{m}) \propto e^{-\beta E(\mathbf{m})}, \qquad
-E(\mathbf{m}) = -\sum_{i<j} J_{ij}\, m_i m_j - \sum_i h_i m_i
-$$
+```math
+P(\mathbf{m}) \propto e^{-\beta E(\mathbf{m})}
+```
+
+```math
+E(\mathbf{m}) = -\sum_{i<j} J_{ij} m_i m_j - \sum_i h_i m_i
+```
 
 In hardware, bit value `1` represents $m = +1$ and bit value `0` represents $m = -1$.
 
 ### 2.2 AND gate as an Ising network
 
-With p-bit order $[A, B, Y]$ (bit 0, bit 1, bit 2 of the `M` register):
+With p-bit order A, B, Y (bit 0, bit 1, bit 2 of the `M` register):
 
-$$
+```math
 J = \begin{bmatrix} 0 & -1 & 2 \\ -1 & 0 & 2 \\ 2 & 2 & 0 \end{bmatrix}, \qquad
 h = \begin{bmatrix} 1 \\ 1 \\ -2 \end{bmatrix}
-$$
+```
 
 All four valid truth-table rows share the same lowest energy, and every invalid row sits higher:
 
-| A | B | Y | Valid AND row? | $E$ |
+| A | B | Y | Valid AND row? | Energy E |
 |---|---|---|---|---|
 | 0 | 0 | 0 | ✅ | −3 |
 | 0 | 1 | 0 | ✅ | −3 |
@@ -68,7 +74,7 @@ All four valid truth-table rows share the same lowest energy, and every invalid 
 | 1 | 1 | 0 | ❌ | +1 |
 | 0 | 0 | 1 | ❌ | +9 |
 
-As $\beta$ grows, probability concentrates on the four valid rows. Clamping $Y$ restricts sampling to the rows that agree with it, which is how the gate runs backwards.
+As $\beta$ grows, probability concentrates on the four valid rows. Clamping Y restricts sampling to the rows that agree with it, which is how the gate runs backwards.
 
 ### 2.3 Annealing
 
@@ -106,11 +112,11 @@ The block design (`mainDesign`) contains `processing_system7_0`, `ps7_0_axi_peri
 
 ### 3.2 Fixed point (Q8.8)
 
-Weights, biases and β use 16-bit signed Q8.8 format: 8 integer bits and 8 fractional bits, so the resolution is $2^{-8} \approx 0.0039$ and the range is $[-128, 127.996]$. The driver converts between floats and Q8.8 with `to_q88()` and `from_q88()`.
+Weights, biases and β use 16-bit signed Q8.8 format: 8 integer bits and 8 fractional bits, so the resolution is 2⁻⁸ ≈ 0.0039 and the range is −128 to 127.996. The driver converts between floats and Q8.8 with `to_q88()` and `from_q88()`.
 
 ### 3.3 Inside the p-bit core
 
-The random source is a 32-bit maximal-length Galois LFSR (taps 32, 22, 2, 1), seeded through the `SEED` register; a seed of zero would lock it, which is why `SEED` must be nonzero. Because every $m_j$ is ±1, the weighted input $\sum_j J_{ij} m_j$ needs no multipliers: each term is simply $+J_{ij}$ or $-J_{ij}$. The `CNT` register counts completed sweeps so software can tell how many updates happened between two samples.
+The random source is a 32-bit maximal-length Galois LFSR (taps 32, 22, 2, 1), seeded through the `SEED` register; a seed of zero would lock it, which is why `SEED` must be nonzero. Because every $m_j$ is ±1, the weighted input needs no multipliers: each term is simply $+J_{ij}$ or $-J_{ij}$. The `CNT` register counts completed sweeps so software can tell how many updates happened between two samples.
 
 ---
 
@@ -181,7 +187,7 @@ print(eng.invertible_and(0))   # clamp Y=0: should give the other three (A,B) pa
 
 ## 7. Design procedure
 
-1. **Algorithm model:** verify the AND-gate $J$, $h$ and the p-bit update rule in Python/NumPy first.
+1. **Algorithm model:** verify the AND-gate J, h and the p-bit update rule in Python/NumPy first.
 2. **RTL design:** write the p-bit core (PRNG, activation, accumulator, update controller) in Verilog.
 3. **Simulation:** testbench in Vivado (xsim) to check the state histogram against the software model.
 4. **IP packaging:** wrap the core in an AXI4-Lite slave with Vivado's *Create and Package New IP* (`slv_reg0..31`) and map the registers.
@@ -204,7 +210,7 @@ print(eng.invertible_and(0))   # clamp Y=0: should give the other three (A,B) pa
 
 ## 9. Limitations and future work
 
-- **Network size is capped at N = 3.** The AXI-Lite address width is 7 bits, which gives 32 registers. J starts at register 16, so $16 + N^2 + N \le 32$ allows at most N = 3. Larger networks need a wider address space, or moving J/h into BRAM.
+- **Network size is capped at N = 3.** The AXI-Lite address width is 7 bits, which gives 32 registers. J starts at register 16, so 16 + N² + N ≤ 32 allows at most N = 3. Larger networks need a wider address space, or moving J/h into BRAM.
 - **Sampling is done in software.** `read_state()` is called through MMIO with `time.sleep()` delays, so samples are slow and can be correlated. An on-chip histogram counter or a DMA stream of states would give much faster, cleaner statistics.
 - **Fixed annealing schedule from the CPU.** A hardware β-schedule generator would remove the Python loop from the critical path.
 - **Next steps:** larger gates (full adder, multiplier for invertible factorization), sparse graph-coloured parallel updates, and Max-Cut benchmarks.
